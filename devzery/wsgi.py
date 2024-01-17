@@ -1,5 +1,5 @@
 """
-WSGI config for djlinktree project.
+WSGI config for devzery project.
 
 It exposes the WSGI callable as a module-level variable named ``application``.
 
@@ -11,6 +11,6 @@ import os
 
 from django.core.wsgi import get_wsgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'djlinktree.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'devzery.settings')
 
 application = get_wsgi_application()

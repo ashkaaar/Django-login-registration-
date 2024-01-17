@@ -3,9 +3,9 @@ import os
 from celery import Celery
 
 # Set the default Django settings module for the 'celery' program.
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'djlinktree.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'devzery.settings')
 
-app = Celery('djlinktree')
+app = Celery('devzery')
 
 # Load the celery configuration from Django settings.
 app.config_from_object('django.conf:settings', namespace='CELERY')
