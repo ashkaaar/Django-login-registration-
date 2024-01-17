@@ -1,120 +1,159 @@
-from django.shortcuts import render, redirect
-from django.http import HttpResponse
-from django.contrib.auth.models import User
-from django.contrib import messages
-from django.core.mail import EmailMessage, send_mail
-from devzery import settings
-from django.contrib.sites.shortcuts import get_current_site
+from typing import Dict, Any
+
+from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
-from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from django.utils.encoding import force_bytes, force_str
-from django.contrib.auth import authenticate, login, logout
-from . tokens import generate_token
-# Create your views here.
-def home(request):
-    return render(request,"authentication/index.html")
+from django.utils.html import strip_tags
+from django.core.exceptions import ValidationError
+from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.tokens import default_token_generator
+from django.contrib.auth.views import PasswordResetConfirmView
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+from django.contrib.auth import authenticate
 
-def signup(request):
-    if request.method == "POST":
-        username = request.POST["username"]
-        fname = request.POST["fname"]
-        lname = request.POST["lname"]
-        email = request.POST["email"]
-        pass1 = request.POST["pass1"]
-        pass2 = request.POST["pass2"]
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.request import Request
+from rest_framework.views import APIView
+from rest_framework import generics
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework_simplejwt.views import TokenObtainPairView
 
-        if User.objects.filter(username=username):
-            messages.error(request, "Username already exist! Please try some other username.")
-            return redirect('home')
-        
-        if User.objects.filter(email=email).exists():
-            messages.error(request, "Email Already Registered!!")
-            return redirect('home')
-        
-        if len(username)>20:
-            messages.error(request, "Username must be under 20 charcters!!")
-            return redirect('home')
-        
-        if pass1 != pass2:
-            messages.error(request, "Passwords didn't matched!!")
-            return redirect('home')
-        
-        if not username.isalnum():
-            messages.error(request, "Username must be Alpha-Numeric!!")
-            return redirect('home')
-        
-        myuser = User.objects.create_user(username, email, pass1)
-        myuser.fname = fname
-        myuser.lname = lname
-        # myuser.is_active = False
-        myuser.is_active = False
-        myuser.save()
-        messages.success(request, "Your Account has been created succesfully!! Please check your email to confirm your email address in order to activate your account.")
-        
-        # Welcome Email
-        subject = "Welcome to fiftybit Django Login!!"
-        message = "Hello " + myuser.first_name + "!! \n" + "Welcome to fiftybit!! \nThank you for visiting our website\n. We have also sent you a confirmation email, please confirm your email address. \n\nThanking You\nShovit Nepal"        
-        from_email = settings.EMAIL_HOST_USER
-        to_list = [myuser.email]
-        send_mail(subject, message, from_email, to_list, fail_silently=True)
-        
-        # Email Address Confirmation Email
-        current_site = get_current_site(request)
-        email_subject = "Confirm your Email @ FiftyBit - Django Login!!"
-        message2 = render_to_string('email_confirmation.html',{
-            
-            'name': myuser.first_name,
-            'domain': current_site.domain,
-            'uid': urlsafe_base64_encode(force_bytes(myuser.pk)),
-            'token': generate_token.make_token(myuser)
-        })
-        email = EmailMessage(
-        email_subject,
-        message2,
-        settings.EMAIL_HOST_USER,
-        [myuser.email],
-        )
-        send_mail(email_subject, message2, from_email, to_list, fail_silently=True)
-        
-        return redirect('signin')
-        
-        
-    return render(request, "authentication/signup.html")
+from user.models import User
+from .serializers import (
+    MyTokenObtainPairSerializer, 
+    UserRegistrationSerializer, 
+    PasswordResetRequestSerializer, 
+    PasswordResetConfirmSerializer,
+)
 
 
-def activate(request,uidb64,token):
-    try:
-        uid = force_str(urlsafe_base64_decode(uidb64))
-        myuser = User.objects.get(pk=uid)
-    except (TypeError,ValueError,OverflowError,User.DoesNotExist):
-        myuser = None
+class MyTokenObtainPairView(TokenObtainPairView):
+    serializer_class = MyTokenObtainPairSerializer
 
-    if myuser is not None and generate_token.check_token(myuser,token):
-        myuser.is_active = True
-        # user.profile.signup_confirmation = True
-        myuser.save()
-        login(request,myuser)
-        messages.success(request, "Your Account has been activated!!")
-        return redirect('signin')
-    else:
-        return render(request,'activation_failed.html')
+
+class UserRegistrationView(generics.CreateAPIView):
+    serializer_class = UserRegistrationSerializer
+    permission_classes = [AllowAny]
     
-def signin(request):
-    if request.method == "POST":
-        username = request.POST["username"]
-        pass1 = request.POST["pass1"]
-        user = authenticate(username=username, password=pass1)
-        if user is not None:
-            login(request, user)
-            username = user.username
-            return render(request,"authentication/index.html", {'username' : username})
 
-        else:
-            messages.error(request, "Bad Credentials!")
-            return redirect("home")
-    return render(request, "authentication/signin.html")
+class DeleteUserAccountView(APIView):
+    permission_classes = [IsAuthenticated]
 
-def signout(request):
-    logout(request)
-    messages.success(request, "Logged out successfully!")
-    return redirect("home")
+    def delete(self, request) -> Response:
+        user = request.user
+        data: Dict[str, Any] = request.data
+        password: str = data.get("password", "")
+
+        if not password:
+            return Response({"detail": "Please provide your password to confirm account deletion."},
+                status=status.HTTP_400_BAD_REQUEST)
+
+        authenticated_user = authenticate(username=user.username, password=password)
+        if not authenticated_user:
+            return Response({"detail": "Incorrect password. Account deletion failed."},
+                status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            user.delete()
+            return Response({"detail": "Account deleted successfully."}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"detail": "An error occurred while deleting the account."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    
+class PasswordResetRequestView(APIView):
+    def post(self, request) -> Response:
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.validated_data["email"]
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            token = default_token_generator.make_token(user)
+            user.password_reset_token = token
+            user.save()
+
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            reset_url = f"http://localhost:3000/password/reset/confirm/{uid}/{token}/"
+            reset_link = request.build_absolute_uri(reset_url)
+            
+            html_message = render_to_string(
+                "authentication/password_reset_email.html",
+                {
+                    "reset_link": reset_link,
+                    "username": user.username
+                },
+            )
+
+            subject = "Django Linktree Demo | Reset your password"
+            text_message = strip_tags(html_message) 
+            from_email = "minenhlengubane17@gmail.com"
+            recipient_list = [email]
+            mail = EmailMultiAlternatives(subject, text_message, from_email, recipient_list)
+            mail.attach_alternative(html_message, "text/html")
+            mail.send(fail_silently=False)
+
+            return Response({"detail": "Password reset email sent"})
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PasswordResetConfirmView(APIView):
+    def post(self, request, uidb64, token) -> Response:
+        serializer = PasswordResetConfirmSerializer(data=request.data, context=self.get_serializer_context(uidb64, token))
+        if serializer.is_valid():
+            user = serializer.get_user()
+            if user is not None:
+                if default_token_generator.check_token(user, token):
+                    user.set_password(serializer.validated_data["password"])
+                    user.save()
+                    return Response({"detail": "Password reset successful"})
+                else:
+                    return Response({"detail": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                return Response({"detail": "Invalid user"}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def get_serializer_context(self, uidb64, token):
+        return {"uidb64": uidb64, "token": token}
+    
+    
+class CheckUsernameView(APIView):
+    permission_classes = [AllowAny]
+    
+    def post(self, request: Request) -> Response:
+        username: str = request.data.get("username", "")
+        if User.objects.filter(username=username).exists():
+            return Response({"available": False})
+        return Response({"available": True})
+    
+    
+class CheckEmailView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request: Request) -> Response:
+        email: str = request.data.get("email", "")
+
+        if User.objects.filter(email=email).exists():
+            return Response({"available": False})
+
+        return Response({"available": True})
+    
+
+class PasswordValidationView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request) -> Response:
+        password: str = request.data.get("password")
+        errors: List[str] = []
+        
+        try:
+            validate_password(password)
+        except ValidationError as e:
+            errors = list(e.messages)
+        
+        return Response({"errors": errors})
