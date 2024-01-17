@@ -14,11 +14,14 @@ from pathlib import Path
 from .info import *
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-EMAIL_USE_TLS = EMAIL_USE_TLS 
-EMAIL_HOST = EMAIL_HOST
-EMAIL_HOST_USER = EMAIL_HOST_USER
-EMAIL_HOST_PASSWORD = EMAIL_HOST_PASSWORD
-EMAIL_PORT= EMAIL_PORT
+# Email settings
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_HOST_USER = 'avishkardandge23@gmail.com'
+EMAIL_HOST_PASSWORD = 'sgrc bjho uahi sjkr' #password generated from security page on manage account section of your email account(search for "App Password")
+EMAIL_USE_TLS = True
+DEFAULT_FROM_EMAIL = 'avishkardandge23@gmail.coms'
 
 
 # Quick-start development settings - unsuitable for production
