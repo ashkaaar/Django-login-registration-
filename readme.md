@@ -101,4 +101,8 @@ This will start the frontend development server, and you should see output indic
 
 
 Screenshots:
+![Registration](https://github.com/ashkaaar/devzery-assignment/blob/main/registration.png)
+![Profiles](https://github.com/ashkaaar/devzery-assignment/blob/main/profiles.png)
+![actions](https://github.com/ashkaaar/devzery-assignment/blob/main/account_actions.png)
+
 
