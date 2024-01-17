@@ -31,7 +31,7 @@ Before you begin, make sure you have the following installed:
 Open your terminal and navigate to the directory where you want to store the project. Then, run the following command to clone the repository:
 
 ```bash
-git clone https://github.com/ashkaaar/devzery-assignment/
+git clone https://github.com/ashkaaar/devzery-assignment.git
 ```
 
 ### Step 2: Create a Virtual Environment (Optional but Recommended)
